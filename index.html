@@ -334,6 +334,7 @@
         ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(0, 0, 800, 600);
 
+        // Grid
         ctx.strokeStyle = '#2a2a2a';
         ctx.lineWidth = 1;
         for (let i = 0; i < 800; i += 40) {
@@ -387,6 +388,8 @@
             zombie.y += (dy / dist) * zombie.speed;
           }
 
+          zombie.walkCycle = (zombie.walkCycle || 0) + 0.15;
+
           if (dist < 30) {
             setHealth(prev => {
               const newHealth = Math.max(0, prev - 0.5);
@@ -415,6 +418,7 @@
               
               if (zombie.health <= 0) {
                 createParticles(zombie.x, zombie.y, '#ef4444');
+                createParticles(zombie.x, zombie.y, '#7f1d1d', 12);
                 game.zombies.splice(zIndex, 1);
                 setScore(prev => prev + 10);
                 playSound('kill');
@@ -431,6 +435,8 @@
         game.particles = game.particles.filter(p => {
           p.x += p.vx;
           p.y += p.vy;
+          p.vx *= 0.98;
+          p.vy *= 0.98;
           p.life--;
           return p.life > 0;
         });
@@ -446,59 +452,236 @@
           });
         }
 
+        // Draw blood particles
         game.particles.forEach(p => {
           ctx.fillStyle = p.color;
           ctx.globalAlpha = p.life / 30;
-          ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+          ctx.fill();
         });
         ctx.globalAlpha = 1;
 
+        // Draw zombies with realistic 2D sprites
         game.zombies.forEach(zombie => {
-          ctx.fillStyle = '#22c55e';
+          ctx.save();
+          ctx.translate(zombie.x, zombie.y);
+          
+          const angle = Math.atan2(game.player.y - zombie.y, game.player.x - zombie.x);
+          const facingRight = Math.abs(angle) < Math.PI / 2;
+          
+          if (!facingRight) {
+            ctx.scale(-1, 1);
+          }
+
+          // Body
+          ctx.fillStyle = '#4a5568';
+          ctx.fillRect(-12, -15, 24, 35);
+          
+          // Torn shirt
+          ctx.fillStyle = '#2d3748';
+          ctx.fillRect(-12, -15, 24, 20);
+          ctx.fillStyle = '#1a202c';
+          ctx.fillRect(-10, -10, 8, 3);
+          ctx.fillRect(2, -10, 8, 3);
+          
+          // Legs with walking animation
+          const legSwing = Math.sin(zombie.walkCycle) * 10;
+          ctx.fillStyle = '#2d3748';
+          ctx.fillRect(-8, 20, 7, 15 + legSwing);
+          ctx.fillRect(1, 20, 7, 15 - legSwing);
+          
+          // Arms
+          const armSwing = Math.sin(zombie.walkCycle + 1) * 8;
+          ctx.fillStyle = '#6b7280';
+          ctx.fillRect(-15, -5 + armSwing, 6, 20);
+          ctx.fillRect(9, -5 - armSwing, 6, 20);
+          
+          // Head
+          ctx.fillStyle = '#7c9885';
           ctx.beginPath();
-          ctx.arc(zombie.x, zombie.y, 15, 0, Math.PI * 2);
+          ctx.arc(0, -20, 10, 0, Math.PI * 2);
           ctx.fill();
           
-          ctx.fillStyle = '#15803d';
-          ctx.beginPath();
-          ctx.arc(zombie.x - 5, zombie.y - 3, 3, 0, Math.PI * 2);
-          ctx.arc(zombie.x + 5, zombie.y - 3, 3, 0, Math.PI * 2);
-          ctx.fill();
-
-          const healthPercent = zombie.health / zombie.maxHealth;
+          // Eyes (red)
           ctx.fillStyle = '#dc2626';
-          ctx.fillRect(zombie.x - 15, zombie.y - 25, 30, 4);
-          ctx.fillStyle = '#22c55e';
-          ctx.fillRect(zombie.x - 15, zombie.y - 25, 30 * healthPercent, 4);
+          ctx.beginPath();
+          ctx.arc(-4, -22, 2, 0, Math.PI * 2);
+          ctx.arc(4, -22, 2, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Mouth (gaping)
+          ctx.fillStyle = '#1a202c';
+          ctx.beginPath();
+          ctx.arc(0, -16, 3, 0, Math.PI);
+          ctx.fill();
+          
+          // Blood drips
+          ctx.fillStyle = '#7f1d1d';
+          ctx.fillRect(-2, -13, 2, 5);
+          ctx.fillRect(1, -11, 1, 3);
+          
+          // Scars
+          ctx.strokeStyle = '#374151';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(-7, -18);
+          ctx.lineTo(-3, -16);
+          ctx.stroke();
+
+          ctx.restore();
+
+          // Health bar
+          const healthPercent = zombie.health / zombie.maxHealth;
+          ctx.fillStyle = '#1f2937';
+          ctx.fillRect(zombie.x - 20, zombie.y - 45, 40, 5);
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(zombie.x - 20, zombie.y - 45, 40 * healthPercent, 5);
+          
+          // Health bar border
+          ctx.strokeStyle = '#000';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(zombie.x - 20, zombie.y - 45, 40, 5);
         });
 
-        ctx.fillStyle = '#fbbf24';
+        // Draw bullets with glow
         game.bullets.forEach(bullet => {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = '#fbbf24';
+          ctx.fillStyle = '#fbbf24';
           ctx.beginPath();
           ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
           ctx.fill();
+          
+          // Bullet trail
+          ctx.fillStyle = '#f59e0b';
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.arc(bullet.x - bullet.vx * 0.5, bullet.y - bullet.vy * 0.5, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.shadowBlur = 0;
         });
 
+        // Draw player with realistic 2D sprite
         ctx.save();
         ctx.translate(game.player.x, game.player.y);
         ctx.rotate(game.player.angle);
         
-        ctx.fillStyle = '#3b82f6';
-        ctx.fillRect(-15, -15, 30, 30);
+        // Body (tactical vest)
+        ctx.fillStyle = '#1e3a8a';
+        ctx.fillRect(-15, -20, 30, 40);
         
+        // Vest details
         ctx.fillStyle = '#1e40af';
-        ctx.fillRect(10, -3, 20, 6);
+        ctx.fillRect(-12, -15, 24, 30);
+        ctx.fillStyle = '#2563eb';
+        ctx.fillRect(-10, -10, 8, 5);
+        ctx.fillRect(2, -10, 8, 5);
+        
+        // Belt
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(-15, 10, 30, 4);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fillRect(-2, 10, 4, 4);
+        
+        // Legs
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(-10, 20, 8, 15);
+        ctx.fillRect(2, 20, 8, 15);
+        
+        // Boots
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(-10, 30, 8, 5);
+        ctx.fillRect(2, 30, 8, 5);
+        
+        // Arms
+        ctx.fillStyle = '#4b5563';
+        ctx.fillRect(-18, -8, 6, 20);
+        ctx.fillRect(12, -8, 6, 20);
+        
+        // Gun (detailed)
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(10, -5, 25, 8);
+        ctx.fillStyle = '#374151';
+        ctx.fillRect(10, -3, 25, 4);
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(32, -4, 3, 6);
+        
+        // Gun barrel
+        ctx.fillStyle = '#000';
+        ctx.fillRect(35, -2, 8, 2);
+        
+        // Muzzle flash when shooting
+        if (mouseDownRef.current && Date.now() - game.lastShot < 100) {
+          ctx.fillStyle = '#fbbf24';
+          ctx.globalAlpha = 0.8;
+          ctx.beginPath();
+          ctx.moveTo(43, 0);
+          ctx.lineTo(50, -5);
+          ctx.lineTo(50, 5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.globalAlpha = 1;
+        }
+        
+        ctx.restore();
+        
+        // Draw head separately (always upright)
+        ctx.save();
+        ctx.translate(game.player.x, game.player.y);
+        
+        // Head
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, -25, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Helmet
+        ctx.fillStyle = '#1e3a8a';
+        ctx.beginPath();
+        ctx.arc(0, -27, 12, Math.PI, Math.PI * 2);
+        ctx.fill();
+        
+        // Face mask
+        ctx.fillStyle = '#1f2937';
+        ctx.fillRect(-8, -22, 16, 8);
+        
+        // Eyes
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(-4, -20, 2, 0, Math.PI * 2);
+        ctx.arc(4, -20, 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Pupils
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(-4, -20, 1, 0, Math.PI * 2);
+        ctx.arc(4, -20, 1, 0, Math.PI * 2);
+        ctx.fill();
         
         ctx.restore();
 
+        // Crosshair with animation
+        const crosshairSize = 12 + Math.sin(Date.now() * 0.005) * 2;
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 2;
+        ctx.shadowBlur = 5;
+        ctx.shadowColor = '#ef4444';
         ctx.beginPath();
-        ctx.moveTo(game.mousePos.x - 10, game.mousePos.y);
-        ctx.lineTo(game.mousePos.x + 10, game.mousePos.y);
-        ctx.moveTo(game.mousePos.x, game.mousePos.y - 10);
-        ctx.lineTo(game.mousePos.x, game.mousePos.y + 10);
+        ctx.moveTo(game.mousePos.x - crosshairSize, game.mousePos.y);
+        ctx.lineTo(game.mousePos.x + crosshairSize, game.mousePos.y);
+        ctx.moveTo(game.mousePos.x, game.mousePos.y - crosshairSize);
+        ctx.lineTo(game.mousePos.x, game.mousePos.y + crosshairSize);
         ctx.stroke();
+        
+        // Crosshair center dot
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(game.mousePos.x, game.mousePos.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
 
         game.animationFrame = requestAnimationFrame(gameLoop);
       };
