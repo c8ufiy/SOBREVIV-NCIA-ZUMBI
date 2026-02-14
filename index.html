@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Jogo de sobrevivência de zumbi">
+  <meta name="theme-color" content="#991b1b">
+  <title>Sobrevivência Zumbi - PWA Game</title>
+  <link rel="manifest" href="/manifest.json">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <script type="module">
+    import React from 'https://esm.sh/react@18.2.0';
+    import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
+    import * as LucideReact from 'https://esm.sh/lucide-react@0.263.1';
+
+    const { useState, useEffect, useRef } = React;
+    const { Skull, Heart, Target, Award, PlayCircle, RotateCcw, Volume2, VolumeX, Zap } = LucideReact;
+
+    function ZombieSurvivalGame() {
+      const canvasRef = useRef(null);
+      const [gameState, setGameState] = useState('menu');
+      const [score, setScore] = useState(0);
+      const [health, setHealth] = useState(100);
+      const [ammo, setAmmo] = useState(30);
+      const [wave, setWave] = useState(1);
+      const [highScore, setHighScore] = useState(0);
+      const [soundEnabled, setSoundEnabled] = useState(true);
+      const [specialCharges, setSpecialCharges] = useState(3);
+      
+      const audioContextRef = useRef(null);
+      const mouseDownRef = useRef(false);
+      
+      const gameRef = useRef({
+        player: { x: 400, y: 300, angle: 0, speed: 3 },
+        zombies: [],
+        bullets: [],
+        particles: [],
+        keys: {},
+        mousePos: { x: 0, y: 0 },
+        lastShot: 0,
+        animationFrame: null
+      });
+
+      useEffect(() => {
+        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }, []);
+
+      const playSound = (type) => {
+        if (!soundEnabled || !audioContextRef.current) return;
+        
+        const ctx = audioContextRef.current;
+        const oscillator = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(ctx.destination);
+        
+        switch(type) {
+          case 'shoot':
+            oscillator.frequency.setValueAtTime(300, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.1);
+            break;
+            
+          case 'hit':
+            oscillator.frequency.setValueAtTime(150, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.15);
+            gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+            oscillator.type = 'sawtooth';
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.15);
+            break;
+            
+          case 'kill':
+            oscillator.frequency.setValueAtTime(200, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+            oscillator.type = 'square';
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.3);
+            break;
+            
+          case 'damage':
+            oscillator.frequency.setValueAtTime(100, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.4);
+            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+            oscillator.type = 'sawtooth';
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.4);
+            break;
+            
+          case 'reload':
+            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.2);
+            gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.2);
+            break;
+            
+          case 'wave':
+            oscillator.frequency.setValueAtTime(600, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.5);
+            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+            oscillator.type = 'sine';
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 0.5);
+            break;
+            
+          case 'gameOver':
+            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 1);
+            gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1);
+            oscillator.type = 'sawtooth';
+            oscillator.start(ctx.currentTime);
+            oscillator.stop(ctx.currentTime + 1);
+            break;
+            
+          case 'special':
+            for (let i = 0; i < 3; i++) {
+              const osc = ctx.createOscillator();
+              const gain = ctx.createGain();
+              osc.connect(gain);
+              gain.connect(ctx.destination);
+              
+              osc.frequency.setValueAtTime(800 - i * 200, ctx.currentTime + i * 0.1);
+              osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3 + i * 0.1);
+              gain.gain.setValueAtTime(0.5, ctx.currentTime + i * 0.1);
+              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3 + i * 0.1);
+              osc.type = 'square';
+              osc.start(ctx.currentTime + i * 0.1);
+              osc.stop(ctx.currentTime + 0.3 + i * 0.1);
+            }
+            break;
+        }
+      };
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const game = gameRef.current;
+
+        const handleKeyDown = (e) => {
+          game.keys[e.key.toLowerCase()] = true;
+          
+          if (e.key === ' ' && gameState === 'playing') {
+            e.preventDefault();
+            useSpecial();
+          }
+        };
+
+        const handleKeyUp = (e) => {
+          game.keys[e.key.toLowerCase()] = false;
+        };
+
+        const handleMouseMove = (e) => {
+          const rect = canvas.getBoundingClientRect();
+          game.mousePos = {
+            x: e.clientX - rect.left,
+            y: e.clientY - rect.top
+          };
+        };
+
+        const handleMouseDown = (e) => {
+          if (gameState !== 'playing') return;
+          mouseDownRef.current = true;
+          shoot();
+        };
+
+        const handleMouseUp = () => {
+          mouseDownRef.current = false;
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('mouseup', handleMouseUp);
+
+        return () => {
+          window.removeEventListener('keydown', handleKeyDown);
+          window.removeEventListener('keyup', handleKeyUp);
+          canvas.removeEventListener('mousemove', handleMouseMove);
+          canvas.removeEventListener('mousedown', handleMouseDown);
+          canvas.removeEventListener('mouseup', handleMouseUp);
+          window.removeEventListener('mouseup', handleMouseUp);
+        };
+      }, [gameState]);
+
+      useEffect(() => {
+        if (gameState === 'playing') {
+          startGame();
+        } else if (gameState === 'menu' || gameState === 'gameOver') {
+          if (gameRef.current.animationFrame) {
+            cancelAnimationFrame(gameRef.current.animationFrame);
+          }
+        }
+      }, [gameState]);
+
+      const startGame = () => {
+        const game = gameRef.current;
+        game.player = { x: 400, y: 300, angle: 0, speed: 3 };
+        game.zombies = [];
+        game.bullets = [];
+        game.particles = [];
+        
+        setScore(0);
+        setHealth(100);
+        setAmmo(30);
+        setWave(1);
+        setSpecialCharges(3);
+        
+        spawnWave(1);
+        gameLoop();
+      };
+
+      const spawnWave = (waveNum) => {
+        const game = gameRef.current;
+        const zombieCount = 5 + waveNum * 3;
+        
+        for (let i = 0; i < zombieCount; i++) {
+          setTimeout(() => {
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch(side) {
+              case 0: x = Math.random() * 800; y = -20; break;
+              case 1: x = 820; y = Math.random() * 600; break;
+              case 2: x = Math.random() * 800; y = 620; break;
+              case 3: x = -20; y = Math.random() * 600; break;
+            }
+            
+            game.zombies.push({
+              x, y,
+              speed: 0.5 + waveNum * 0.1,
+              health: 2 + Math.floor(waveNum / 3),
+              maxHealth: 2 + Math.floor(waveNum / 3)
+            });
+          }, i * 500);
+        }
+      };
+
+      const shoot = () => {
+        const game = gameRef.current;
+        const now = Date.now();
+        
+        if (now - game.lastShot < 250 || ammo <= 0) return;
+        
+        game.lastShot = now;
+        setAmmo(prev => prev - 1);
+        playSound('shoot');
+        
+        const angle = Math.atan2(
+          game.mousePos.y - game.player.y,
+          game.mousePos.x - game.player.x
+        );
+        
+        game.bullets.push({
+          x: game.player.x,
+          y: game.player.y,
+          vx: Math.cos(angle) * 8,
+          vy: Math.sin(angle) * 8
+        });
+      };
+
+      const useSpecial = () => {
+        if (specialCharges <= 0) return;
+        
+        const game = gameRef.current;
+        setSpecialCharges(prev => prev - 1);
+        playSound('special');
+        
+        createParticles(game.player.x, game.player.y, '#fbbf24', 30);
+        
+        game.zombies.forEach(zombie => {
+          const dx = zombie.x - game.player.x;
+          const dy = zombie.y - game.player.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist < 300) {
+            zombie.health -= 3;
+            createParticles(zombie.x, zombie.y, '#ef4444', 5);
+          }
+        });
+        
+        const killedCount = game.zombies.filter(z => z.health <= 0).length;
+        game.zombies = game.zombies.filter(z => z.health > 0);
+        
+        setScore(prev => prev + killedCount * 10);
+      };
+
+      const createParticles = (x, y, color, count = 8) => {
+        const game = gameRef.current;
+        for (let i = 0; i < count; i++) {
+          const angle = (Math.PI * 2 * i) / count;
+          game.particles.push({
+            x, y,
+            vx: Math.cos(angle) * (2 + Math.random() * 2),
+            vy: Math.sin(angle) * (2 + Math.random() * 2),
+            life: 30,
+            color
+          });
+        }
+      };
+
+      const gameLoop = () => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const game = gameRef.current;
+
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, 800, 600);
+
+        ctx.strokeStyle = '#2a2a2a';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < 800; i += 40) {
+          ctx.beginPath();
+          ctx.moveTo(i, 0);
+          ctx.lineTo(i, 600);
+          ctx.stroke();
+        }
+        for (let i = 0; i < 600; i += 40) {
+          ctx.beginPath();
+          ctx.moveTo(0, i);
+          ctx.lineTo(800, i);
+          ctx.stroke();
+        }
+
+        if (mouseDownRef.current) {
+          shoot();
+        }
+
+        if (game.keys['w'] || game.keys['arrowup']) {
+          game.player.y = Math.max(20, game.player.y - game.player.speed);
+        }
+        if (game.keys['s'] || game.keys['arrowdown']) {
+          game.player.y = Math.min(580, game.player.y + game.player.speed);
+        }
+        if (game.keys['a'] || game.keys['arrowleft']) {
+          game.player.x = Math.max(20, game.player.x - game.player.speed);
+        }
+        if (game.keys['d'] || game.keys['arrowright']) {
+          game.player.x = Math.min(780, game.player.x + game.player.speed);
+        }
+
+        game.player.angle = Math.atan2(
+          game.mousePos.y - game.player.y,
+          game.mousePos.x - game.player.x
+        );
+
+        game.bullets = game.bullets.filter(bullet => {
+          bullet.x += bullet.vx;
+          bullet.y += bullet.vy;
+          return bullet.x > 0 && bullet.x < 800 && bullet.y > 0 && bullet.y < 600;
+        });
+
+        game.zombies.forEach(zombie => {
+          const dx = game.player.x - zombie.x;
+          const dy = game.player.y - zombie.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          
+          if (dist > 0) {
+            zombie.x += (dx / dist) * zombie.speed;
+            zombie.y += (dy / dist) * zombie.speed;
+          }
+
+          if (dist < 30) {
+            setHealth(prev => {
+              const newHealth = Math.max(0, prev - 0.5);
+              if (newHealth <= 0) {
+                playSound('gameOver');
+                setGameState('gameOver');
+                setHighScore(prevHigh => Math.max(prevHigh, score));
+              } else if (Math.random() < 0.1) {
+                playSound('damage');
+              }
+              return newHealth;
+            });
+          }
+        });
+
+        game.bullets.forEach((bullet, bIndex) => {
+          game.zombies.forEach((zombie, zIndex) => {
+            const dx = bullet.x - zombie.x;
+            const dy = bullet.y - zombie.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < 20) {
+              zombie.health--;
+              game.bullets.splice(bIndex, 1);
+              playSound('hit');
+              
+              if (zombie.health <= 0) {
+                createParticles(zombie.x, zombie.y, '#ef4444');
+                game.zombies.splice(zIndex, 1);
+                setScore(prev => prev + 10);
+                playSound('kill');
+                
+                if (Math.random() < 0.3) {
+                  setAmmo(prev => prev + 5);
+                  playSound('reload');
+                }
+              }
+            }
+          });
+        });
+
+        game.particles = game.particles.filter(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          p.life--;
+          return p.life > 0;
+        });
+
+        if (game.zombies.length === 0 && gameState === 'playing') {
+          setWave(prev => {
+            const newWave = prev + 1;
+            spawnWave(newWave);
+            setAmmo(prevAmmo => prevAmmo + 10);
+            setSpecialCharges(prevCharges => Math.min(5, prevCharges + 1));
+            playSound('wave');
+            return newWave;
+          });
+        }
+
+        game.particles.forEach(p => {
+          ctx.fillStyle = p.color;
+          ctx.globalAlpha = p.life / 30;
+          ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        });
+        ctx.globalAlpha = 1;
+
+        game.zombies.forEach(zombie => {
+          ctx.fillStyle = '#22c55e';
+          ctx.beginPath();
+          ctx.arc(zombie.x, zombie.y, 15, 0, Math.PI * 2);
+          ctx.fill();
+          
+          ctx.fillStyle = '#15803d';
+          ctx.beginPath();
+          ctx.arc(zombie.x - 5, zombie.y - 3, 3, 0, Math.PI * 2);
+          ctx.arc(zombie.x + 5, zombie.y - 3, 3, 0, Math.PI * 2);
+          ctx.fill();
+
+          const healthPercent = zombie.health / zombie.maxHealth;
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(zombie.x - 15, zombie.y - 25, 30, 4);
+          ctx.fillStyle = '#22c55e';
+          ctx.fillRect(zombie.x - 15, zombie.y - 25, 30 * healthPercent, 4);
+        });
+
+        ctx.fillStyle = '#fbbf24';
+        game.bullets.forEach(bullet => {
+          ctx.beginPath();
+          ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.save();
+        ctx.translate(game.player.x, game.player.y);
+        ctx.rotate(game.player.angle);
+        
+        ctx.fillStyle = '#3b82f6';
+        ctx.fillRect(-15, -15, 30, 30);
+        
+        ctx.fillStyle = '#1e40af';
+        ctx.fillRect(10, -3, 20, 6);
+        
+        ctx.restore();
+
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(game.mousePos.x - 10, game.mousePos.y);
+        ctx.lineTo(game.mousePos.x + 10, game.mousePos.y);
+        ctx.moveTo(game.mousePos.x, game.mousePos.y - 10);
+        ctx.lineTo(game.mousePos.x, game.mousePos.y + 10);
+        ctx.stroke();
+
+        game.animationFrame = requestAnimationFrame(gameLoop);
+      };
+
+      return React.createElement('div', {
+        className: "min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center p-4"
+      },
+        React.createElement('div', { className: "max-w-4xl w-full" },
+          gameState === 'menu' && React.createElement('div', { className: "text-center space-y-8" },
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement(Skull, { className: "w-24 h-24 mx-auto text-red-500" }),
+              React.createElement('h1', { className: "text-6xl font-bold text-white" }, "SOBREVIVÊNCIA ZUMBI"),
+              React.createElement('p', { className: "text-xl text-gray-300" }, "Sobreviva às ondas de zumbis!")
+            ),
+            React.createElement('div', { className: "bg-black/50 rounded-lg p-6 text-left max-w-md mx-auto space-y-3 text-gray-300" },
+              React.createElement('h2', { className: "text-2xl font-bold text-white mb-4" }, "Como Jogar:"),
+              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "WASD / Setas:"), " Mover"),
+              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "Mouse:"), " Mirar"),
+              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "Segurar Mouse:"), " Tiro automático"),
+              React.createElement('p', {}, React.createElement('strong', { className: "text-cyan-400" }, "ESPAÇO:"), " Habilidade Especial (explosão)"),
+              React.createElement('p', { className: "text-sm text-yellow-400 mt-4" }, "💡 Zumbis soltam munição aleatoriamente!"),
+              React.createElement('p', { className: "text-sm text-cyan-400" }, "⚡ Ganhe cargas especiais ao completar ondas!")
+            ),
+            highScore > 0 && React.createElement('div', { className: "flex items-center justify-center gap-2 text-yellow-400 text-xl" },
+              React.createElement(Award, { className: "w-6 h-6" }),
+              React.createElement('span', {}, `Recorde: ${highScore}`)
+            ),
+            React.createElement('button', {
+              onClick: () => setGameState('playing'),
+              className: "bg-red-600 hover:bg-red-700 text-white px-12 py-4 rounded-lg text-2xl font-bold flex items-center gap-3 mx-auto transition-all transform hover:scale-105"
+            },
+              React.createElement(PlayCircle, { className: "w-8 h-8" }),
+              "Começar Jogo"
+            )
+          ),
+          
+          gameState === 'playing' && React.createElement('div', { className: "space-y-4" },
+            React.createElement('div', { className: "bg-black/70 rounded-lg p-4 flex justify-between items-center text-white" },
+              React.createElement('div', { className: "flex items-center gap-2" },
+                React.createElement(Heart, { className: "w-6 h-6 text-red-500" }),
+                React.createElement('div', { className: "w-48 bg-gray-700 rounded-full h-6" },
+                  React.createElement('div', {
+                    className: "bg-red-500 h-6 rounded-full transition-all",
+                    style: { width: `${health}%` }
+                  })
+                ),
+                React.createElement('span', { className: "font-bold" }, `${Math.round(health)}%`)
+              ),
+              React.createElement('div', { className: "flex items-center gap-4" },
+                React.createElement('div', { className: "flex items-center gap-2" },
+                  React.createElement(Target, { className: "w-6 h-6 text-yellow-500" }),
+                  React.createElement('span', { className: "font-bold text-2xl" }, ammo)
+                ),
+                React.createElement('div', { className: "flex items-center gap-2" },
+                  React.createElement(Zap, { className: "w-6 h-6 text-cyan-400" }),
+                  React.createElement('div', { className: "flex gap-1" },
+                    [...Array(5)].map((_, i) =>
+                      React.createElement('div', {
+                        key: i,
+                        className: `w-3 h-6 rounded ${i < specialCharges ? 'bg-cyan-400' : 'bg-gray-600'}`
+                      })
+                    )
+                  )
+                )
+              ),
+              React.createElement('div', { className: "flex items-center gap-4" },
+                React.createElement('span', { className: "text-xl" }, 
+                  "Onda: ",
+                  React.createElement('strong', { className: "text-red-400" }, wave)
+                ),
+                React.createElement('span', { className: "text-xl" },
+                  "Pontos: ",
+                  React.createElement('strong', { className: "text-yellow-400" }, score)
+                ),
+                React.createElement('button', {
+                  onClick: () => setSoundEnabled(!soundEnabled),
+                  className: "p-2 hover:bg-white/10 rounded-lg transition-colors",
+                  title: soundEnabled ? 'Desativar som' : 'Ativar som'
+                },
+                  soundEnabled ? React.createElement(Volume2, { className: "w-6 h-6" }) : React.createElement(VolumeX, { className: "w-6 h-6" })
+                )
+              )
+            ),
+            React.createElement('canvas', {
+              ref: canvasRef,
+              width: 800,
+              height: 600,
+              className: "border-4 border-red-600 rounded-lg w-full cursor-none",
+              style: { maxWidth: '800px', aspectRatio: '4/3' }
+            }),
+            React.createElement('div', { className: "text-center text-gray-400 text-sm space-y-1" },
+              React.createElement('p', {}, "🎯 Sobreviva o máximo que puder! Cada onda fica mais difícil."),
+              React.createElement('p', { className: "text-cyan-400" }, `⚡ Pressione ESPAÇO para usar a habilidade especial (${specialCharges} disponíveis)`)
+            )
+          ),
+          
+          gameState === 'gameOver' && React.createElement('div', { className: "text-center space-y-8" },
+            React.createElement('div', { className: "space-y-4" },
+              React.createElement(Skull, { className: "w-24 h-24 mx-auto text-red-500 animate-pulse" }),
+              React.createElement('h1', { className: "text-6xl font-bold text-white" }, "GAME OVER"),
+              React.createElement('p', { className: "text-2xl text-red-400" }, "Você foi derrotado!")
+            ),
+            React.createElement('div', { className: "bg-black/50 rounded-lg p-8 max-w-md mx-auto space-y-4" },
+              React.createElement('div', { className: "flex justify-between text-xl text-white" },
+                React.createElement('span', {}, "Pontuação Final:"),
+                React.createElement('span', { className: "font-bold text-yellow-400" }, score)
+              ),
+              React.createElement('div', { className: "flex justify-between text-xl text-white" },
+                React.createElement('span', {}, "Ondas Sobrevividas:"),
+                React.createElement('span', { className: "font-bold text-red-400" }, wave - 1)
+              ),
+              score >= highScore && score > 0 && React.createElement('p', { className: "text-yellow-400 font-bold flex items-center justify-center gap-2" },
+                React.createElement(Award, { className: "w-6 h-6" }),
+                "NOVO RECORDE!"
+              )
+            ),
+            React.createElement('div', { className: "flex gap-4 justify-center" },
+              React.createElement('button', {
+                onClick: () => setGameState('playing'),
+                className: "bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-lg text-xl font-bold flex items-center gap-2 transition-all transform hover:scale-105"
+              },
+                React.createElement(RotateCcw, { className: "w-6 h-6" }),
+                "Jogar Novamente"
+              ),
+              React.createElement('button', {
+                onClick: () => setGameState('menu'),
+                className: "bg-gray-700 hover:bg-gray-600 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all"
+              },
+                "Menu"
+              )
+            )
+          )
+        )
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(ZombieSurvivalGame));
+  </script>
+</body>
+</html>
