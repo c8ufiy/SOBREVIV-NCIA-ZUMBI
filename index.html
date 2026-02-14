@@ -3,16 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="description" content="Jogo de sobrevivência de zumbi">
-  <meta name="theme-color" content="#991b1b">
-  <title>Sobrevivência Zumbi - PWA Game</title>
+  <meta name="description" content="Jogo 3D de sobrevivência de zumbi">
+  <meta name="theme-color" content="#0a0a0a">
+  <title>UNDEAD PROTOCOL - 3D Survival</title>
   <link rel="manifest" href="/manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+    }
+    
+    :root {
+      --neon-green: #00ff41;
+      --neon-red: #ff0051;
+      --neon-cyan: #00f0ff;
+      --dark-bg: #0a0a0a;
+      --grid-color: #1a1a1a;
     }
     
     body {
@@ -23,949 +35,871 @@
       height: 100vh;
       position: fixed;
       touch-action: none;
+      background: var(--dark-bg);
+      font-family: 'Rajdhani', sans-serif;
     }
     
     #root {
       width: 100%;
       height: 100%;
+      position: relative;
     }
     
-    canvas {
+    .game-canvas {
       display: block;
-      touch-action: none;
-    }
-    
-    .game-container {
       width: 100%;
       height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
     
-    @media (max-width: 768px) {
-      .desktop-only {
-        display: none !important;
-      }
-    }
-    
-    @media (orientation: portrait) and (max-width: 768px) {
-      .landscape-warning {
-        display: flex !important;
-      }
-      .game-content {
-        display: none !important;
-      }
-    }
-    
-    .landscape-warning {
-      display: none;
+    .scanlines {
       position: fixed;
       top: 0;
       left: 0;
       width: 100%;
       height: 100%;
-      background: linear-gradient(to bottom right, #1a1a1a, #991b1b, #1a1a1a);
+      pointer-events: none;
+      background: linear-gradient(
+        transparent 50%,
+        rgba(0, 255, 65, 0.02) 50%
+      );
+      background-size: 100% 4px;
+      z-index: 100;
+      animation: scanline 8s linear infinite;
+    }
+    
+    @keyframes scanline {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(4px); }
+    }
+    
+    .hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      padding: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      z-index: 50;
+      font-family: 'Orbitron', monospace;
+      pointer-events: none;
+    }
+    
+    .hud-section {
+      background: rgba(10, 10, 10, 0.85);
+      border: 2px solid var(--neon-green);
+      padding: 15px 20px;
+      border-radius: 4px;
+      box-shadow: 0 0 20px rgba(0, 255, 65, 0.3);
+      backdrop-filter: blur(10px);
+    }
+    
+    .hud-title {
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: var(--neon-green);
+      margin-bottom: 8px;
+      opacity: 0.7;
+    }
+    
+    .hud-value {
+      font-size: 28px;
+      font-weight: 900;
       color: white;
-      flex-direction: column;
+      text-shadow: 0 0 10px var(--neon-green);
+    }
+    
+    .health-bar {
+      width: 200px;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--neon-green);
+      margin-top: 8px;
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .health-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--neon-red), var(--neon-green));
+      transition: width 0.3s;
+      box-shadow: 0 0 10px currentColor;
+    }
+    
+    .crosshair {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 40px;
+      height: 40px;
+      pointer-events: none;
+      z-index: 60;
+    }
+    
+    .crosshair::before,
+    .crosshair::after {
+      content: '';
+      position: absolute;
+      background: var(--neon-cyan);
+      box-shadow: 0 0 10px var(--neon-cyan);
+    }
+    
+    .crosshair::before {
+      top: 50%;
+      left: 0;
+      width: 100%;
+      height: 2px;
+      transform: translateY(-50%);
+    }
+    
+    .crosshair::after {
+      left: 50%;
+      top: 0;
+      height: 100%;
+      width: 2px;
+      transform: translateX(-50%);
+    }
+    
+    .crosshair-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 4px;
+      height: 4px;
+      background: var(--neon-red);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--neon-red);
+      animation: pulse 1s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+      50% { opacity: 0.5; transform: translate(-50%, -50%) scale(1.5); }
+    }
+    
+    .menu-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0a0a0a 100%);
+      display: flex;
       align-items: center;
       justify-content: center;
-      z-index: 9999;
-      padding: 20px;
+      z-index: 200;
+      overflow: hidden;
+    }
+    
+    .menu-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: 
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 2px,
+          rgba(0, 255, 65, 0.03) 2px,
+          rgba(0, 255, 65, 0.03) 4px
+        );
+      animation: bgScroll 20s linear infinite;
+    }
+    
+    @keyframes bgScroll {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(40px); }
+    }
+    
+    .menu-content {
+      position: relative;
+      z-index: 1;
       text-align: center;
+      max-width: 600px;
+      padding: 40px;
     }
     
-    .rotate-icon {
-      font-size: 80px;
-      animation: rotate 2s infinite;
+    .game-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 72px;
+      font-weight: 900;
+      color: var(--neon-green);
+      text-shadow: 
+        0 0 20px var(--neon-green),
+        0 0 40px var(--neon-green),
+        0 0 60px rgba(0, 255, 65, 0.5);
+      letter-spacing: 8px;
+      margin-bottom: 10px;
+      animation: titleGlow 2s ease-in-out infinite;
     }
     
-    @keyframes rotate {
-      0%, 100% { transform: rotate(0deg); }
-      50% { transform: rotate(90deg); }
+    @keyframes titleGlow {
+      0%, 100% { text-shadow: 0 0 20px var(--neon-green), 0 0 40px var(--neon-green); }
+      50% { text-shadow: 0 0 30px var(--neon-green), 0 0 60px var(--neon-green), 0 0 80px rgba(0, 255, 65, 0.7); }
+    }
+    
+    .game-subtitle {
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 18px;
+      color: var(--neon-cyan);
+      letter-spacing: 6px;
+      margin-bottom: 50px;
+      text-shadow: 0 0 10px var(--neon-cyan);
+    }
+    
+    .btn-start {
+      font-family: 'Orbitron', monospace;
+      font-size: 24px;
+      font-weight: 700;
+      padding: 20px 60px;
+      background: transparent;
+      color: var(--neon-green);
+      border: 3px solid var(--neon-green);
+      cursor: pointer;
+      letter-spacing: 4px;
+      transition: all 0.3s;
+      box-shadow: 
+        0 0 20px rgba(0, 255, 65, 0.3),
+        inset 0 0 20px rgba(0, 255, 65, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .btn-start::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.3), transparent);
+      transition: left 0.5s;
+    }
+    
+    .btn-start:hover::before {
+      left: 100%;
+    }
+    
+    .btn-start:hover {
+      background: var(--neon-green);
+      color: black;
+      box-shadow: 
+        0 0 40px var(--neon-green),
+        inset 0 0 40px rgba(0, 255, 65, 0.5);
+    }
+    
+    .controls-info {
+      margin-top: 40px;
+      padding: 20px;
+      background: rgba(0, 255, 65, 0.05);
+      border: 1px solid rgba(0, 255, 65, 0.2);
+      font-family: 'Rajdhani', sans-serif;
+    }
+    
+    .controls-title {
+      font-family: 'Orbitron', monospace;
+      font-size: 14px;
+      color: var(--neon-green);
+      letter-spacing: 3px;
+      margin-bottom: 15px;
+    }
+    
+    .control-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 16px;
+    }
+    
+    .control-key {
+      color: var(--neon-cyan);
+      font-weight: 600;
+      text-shadow: 0 0 5px var(--neon-cyan);
+    }
+    
+    .wave-alert {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-family: 'Orbitron', monospace;
+      font-size: 48px;
+      font-weight: 900;
+      color: var(--neon-red);
+      text-shadow: 0 0 30px var(--neon-red);
+      z-index: 150;
+      pointer-events: none;
+      animation: waveAlert 2s ease-out forwards;
+      opacity: 0;
+    }
+    
+    @keyframes waveAlert {
+      0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+      50% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); }
+      100% { opacity: 0; transform: translate(-50%, -50%) scale(1); }
+    }
+    
+    .special-indicator {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 60;
+      pointer-events: none;
+    }
+    
+    .special-charges {
+      display: flex;
+      gap: 10px;
+    }
+    
+    .charge {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--neon-cyan);
+      background: rgba(0, 240, 255, 0.1);
+      position: relative;
+      clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%);
+    }
+    
+    .charge.active {
+      background: var(--neon-cyan);
+      box-shadow: 0 0 20px var(--neon-cyan);
+      animation: chargeGlow 1s infinite;
+    }
+    
+    @keyframes chargeGlow {
+      0%, 100% { box-shadow: 0 0 20px var(--neon-cyan); }
+      50% { box-shadow: 0 0 40px var(--neon-cyan), 0 0 60px var(--neon-cyan); }
+    }
+    
+    @media (max-width: 768px) {
+      .game-title { font-size: 36px; }
+      .game-subtitle { font-size: 14px; }
+      .btn-start { font-size: 18px; padding: 15px 40px; }
+      .hud-section { padding: 10px 15px; }
+      .hud-value { font-size: 20px; }
+      .health-bar { width: 120px; }
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
-  
-  <!-- Landscape warning for mobile portrait -->
-  <div class="landscape-warning">
-    <div class="rotate-icon">📱</div>
-    <h1 style="font-size: 32px; font-weight: bold; margin: 20px 0;">Gire seu dispositivo</h1>
-    <p style="font-size: 18px; opacity: 0.8;">Este jogo funciona melhor na horizontal</p>
-  </div>
+  <div class="scanlines"></div>
   
   <script type="module">
     import React from 'https://esm.sh/react@18.2.0';
     import ReactDOM from 'https://esm.sh/react-dom@18.2.0/client';
-    import * as LucideReact from 'https://esm.sh/lucide-react@0.263.1';
 
     const { useState, useEffect, useRef } = React;
-    const { Skull, Heart, Target, Award, PlayCircle, RotateCcw, Volume2, VolumeX, Zap } = LucideReact;
 
-    function ZombieSurvivalGame() {
-      const canvasRef = useRef(null);
+    function ZombieGame3D() {
+      const containerRef = useRef(null);
       const [gameState, setGameState] = useState('menu');
-      const [score, setScore] = useState(0);
       const [health, setHealth] = useState(100);
       const [ammo, setAmmo] = useState(30);
+      const [score, setScore] = useState(0);
       const [wave, setWave] = useState(1);
-      const [highScore, setHighScore] = useState(0);
-      const [soundEnabled, setSoundEnabled] = useState(true);
       const [specialCharges, setSpecialCharges] = useState(3);
-      const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
-      
-      const audioContextRef = useRef(null);
-      const mouseDownRef = useRef(false);
+      const [showWaveAlert, setShowWaveAlert] = useState(false);
       
       const gameRef = useRef({
-        player: { x: 400, y: 300, angle: 0, speed: 3 },
+        scene: null,
+        camera: null,
+        renderer: null,
+        player: null,
         zombies: [],
         bullets: [],
-        particles: [],
+        floor: null,
+        mouseX: 0,
+        mouseY: 0,
         keys: {},
-        mousePos: { x: 0, y: 0 },
         lastShot: 0,
         animationFrame: null
       });
 
-      // Handle responsive canvas sizing
       useEffect(() => {
-        const updateCanvasSize = () => {
-          const maxWidth = window.innerWidth - 40;
-          const maxHeight = window.innerHeight - 200;
-          const aspectRatio = 4 / 3;
-          
-          let width = maxWidth;
-          let height = width / aspectRatio;
-          
-          if (height > maxHeight) {
-            height = maxHeight;
-            width = height * aspectRatio;
-          }
-          
-          // Ensure minimum size
-          width = Math.max(320, Math.min(800, width));
-          height = Math.max(240, Math.min(600, height));
-          
-          setCanvasSize({ width, height });
-          
-          // Update game world if playing
-          if (gameRef.current.player) {
-            const scaleX = width / 800;
-            const scaleY = height / 600;
-            gameRef.current.player.x = 400 * scaleX;
-            gameRef.current.player.y = 300 * scaleY;
-          }
-        };
-        
-        updateCanvasSize();
-        window.addEventListener('resize', updateCanvasSize);
-        window.addEventListener('orientationchange', updateCanvasSize);
+        if (gameState === 'playing' && containerRef.current) {
+          initGame();
+        }
         
         return () => {
-          window.removeEventListener('resize', updateCanvasSize);
-          window.removeEventListener('orientationchange', updateCanvasSize);
+          if (gameRef.current.animationFrame) {
+            cancelAnimationFrame(gameRef.current.animationFrame);
+          }
+          if (gameRef.current.renderer) {
+            gameRef.current.renderer.dispose();
+          }
         };
-      }, []);
+      }, [gameState]);
 
-      useEffect(() => {
-        audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-      }, []);
-
-      const playSound = (type) => {
-        if (!soundEnabled || !audioContextRef.current) return;
+      const initGame = () => {
+        const container = containerRef.current;
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x0a0a0a, 10, 100);
         
-        const ctx = audioContextRef.current;
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
+        const camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000
+        );
+        camera.position.set(0, 15, 15);
+        camera.lookAt(0, 0, 0);
         
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
         
-        switch(type) {
-          case 'shoot':
-            oscillator.frequency.setValueAtTime(300, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.1);
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.1);
-            break;
-            
-          case 'hit':
-            oscillator.frequency.setValueAtTime(150, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.15);
-            gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-            oscillator.type = 'sawtooth';
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.15);
-            break;
-            
-          case 'kill':
-            oscillator.frequency.setValueAtTime(200, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3);
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-            oscillator.type = 'square';
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.3);
-            break;
-            
-          case 'damage':
-            oscillator.frequency.setValueAtTime(100, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.4);
-            gainNode.gain.setValueAtTime(0.5, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-            oscillator.type = 'sawtooth';
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.4);
-            break;
-            
-          case 'reload':
-            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.2);
-            gainNode.gain.setValueAtTime(0.2, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.2);
-            break;
-            
-          case 'wave':
-            oscillator.frequency.setValueAtTime(600, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.5);
-            gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-            oscillator.type = 'sine';
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 0.5);
-            break;
-            
-          case 'gameOver':
-            oscillator.frequency.setValueAtTime(400, ctx.currentTime);
-            oscillator.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 1);
-            gainNode.gain.setValueAtTime(0.4, ctx.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1);
-            oscillator.type = 'sawtooth';
-            oscillator.start(ctx.currentTime);
-            oscillator.stop(ctx.currentTime + 1);
-            break;
-            
-          case 'special':
-            for (let i = 0; i < 3; i++) {
-              const osc = ctx.createOscillator();
-              const gain = ctx.createGain();
-              osc.connect(gain);
-              gain.connect(ctx.destination);
-              
-              osc.frequency.setValueAtTime(800 - i * 200, ctx.currentTime + i * 0.1);
-              osc.frequency.exponentialRampToValueAtTime(50, ctx.currentTime + 0.3 + i * 0.1);
-              gain.gain.setValueAtTime(0.5, ctx.currentTime + i * 0.1);
-              gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3 + i * 0.1);
-              osc.type = 'square';
-              osc.start(ctx.currentTime + i * 0.1);
-              osc.stop(ctx.currentTime + 0.3 + i * 0.1);
-            }
-            break;
-        }
-      };
-
-      useEffect(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const game = gameRef.current;
-
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0x00ff41, 0.2);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0x00f0ff, 0.8);
+        dirLight.position.set(5, 20, 5);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+        
+        // Floor with grid
+        const floorGeometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+        const floorMaterial = new THREE.MeshStandardMaterial({
+          color: 0x0a0a0a,
+          wireframe: true,
+          emissive: 0x00ff41,
+          emissiveIntensity: 0.1
+        });
+        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+        floor.rotation.x = -Math.PI / 2;
+        floor.receiveShadow = true;
+        scene.add(floor);
+        
+        // Player
+        const playerGroup = new THREE.Group();
+        
+        const bodyGeometry = new THREE.BoxGeometry(1, 2, 0.5);
+        const bodyMaterial = new THREE.MeshStandardMaterial({
+          color: 0x0066ff,
+          emissive: 0x0033ff,
+          emissiveIntensity: 0.3
+        });
+        const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+        body.position.y = 1;
+        body.castShadow = true;
+        playerGroup.add(body);
+        
+        const headGeometry = new THREE.SphereGeometry(0.4, 16, 16);
+        const headMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffd700,
+          emissive: 0xffaa00,
+          emissiveIntensity: 0.3
+        });
+        const head = new THREE.Mesh(headGeometry, headMaterial);
+        head.position.y = 2.4;
+        head.castShadow = true;
+        playerGroup.add(head);
+        
+        const gunGeometry = new THREE.BoxGeometry(0.2, 0.2, 1.5);
+        const gunMaterial = new THREE.MeshStandardMaterial({
+          color: 0x222222,
+          metalness: 0.8,
+          roughness: 0.2
+        });
+        const gun = new THREE.Mesh(gunGeometry, gunMaterial);
+        gun.position.set(0.5, 1.5, -0.8);
+        gun.castShadow = true;
+        playerGroup.add(gun);
+        
+        scene.add(playerGroup);
+        
+        gameRef.current = {
+          ...gameRef.current,
+          scene,
+          camera,
+          renderer,
+          player: playerGroup,
+          floor
+        };
+        
+        // Input handlers
         const handleKeyDown = (e) => {
-          game.keys[e.key.toLowerCase()] = true;
-          
-          if (e.key === ' ' && gameState === 'playing') {
+          gameRef.current.keys[e.key.toLowerCase()] = true;
+          if (e.key === ' ') {
             e.preventDefault();
             useSpecial();
           }
         };
-
+        
         const handleKeyUp = (e) => {
-          game.keys[e.key.toLowerCase()] = false;
+          gameRef.current.keys[e.key.toLowerCase()] = false;
         };
-
+        
         const handleMouseMove = (e) => {
-          const rect = canvas.getBoundingClientRect();
-          const scaleX = canvasSize.width / rect.width;
-          const scaleY = canvasSize.height / rect.height;
-          
-          const clientX = e.clientX || (e.touches && e.touches[0]?.clientX);
-          const clientY = e.clientY || (e.touches && e.touches[0]?.clientY);
-          
-          if (clientX !== undefined && clientY !== undefined) {
-            game.mousePos = {
-              x: (clientX - rect.left) * scaleX,
-              y: (clientY - rect.top) * scaleY
-            };
-          }
+          gameRef.current.mouseX = (e.clientX / window.innerWidth) * 2 - 1;
+          gameRef.current.mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
         };
-
-        const handleMouseDown = (e) => {
-          if (gameState !== 'playing') return;
-          e.preventDefault();
-          mouseDownRef.current = true;
-          handleMouseMove(e);
+        
+        const handleClick = () => {
           shoot();
         };
-
-        const handleMouseUp = () => {
-          mouseDownRef.current = false;
-        };
-
+        
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
-        canvas.addEventListener('mousemove', handleMouseMove);
-        canvas.addEventListener('touchmove', handleMouseMove, { passive: false });
-        canvas.addEventListener('mousedown', handleMouseDown);
-        canvas.addEventListener('touchstart', handleMouseDown, { passive: false });
-        canvas.addEventListener('mouseup', handleMouseUp);
-        canvas.addEventListener('touchend', handleMouseUp);
-        window.addEventListener('mouseup', handleMouseUp);
-        window.addEventListener('touchend', handleMouseUp);
-
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('click', handleClick);
+        
+        spawnWave(1);
+        animate();
+        
         return () => {
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
-          canvas.removeEventListener('mousemove', handleMouseMove);
-          canvas.removeEventListener('touchmove', handleMouseMove);
-          canvas.removeEventListener('mousedown', handleMouseDown);
-          canvas.removeEventListener('touchstart', handleMouseDown);
-          canvas.removeEventListener('mouseup', handleMouseUp);
-          canvas.removeEventListener('touchend', handleMouseUp);
-          window.removeEventListener('mouseup', handleMouseUp);
-          window.removeEventListener('touchend', handleMouseUp);
+          window.removeEventListener('mousemove', handleMouseMove);
+          window.removeEventListener('click', handleClick);
         };
-      }, [gameState, canvasSize]);
-
-      useEffect(() => {
-        if (gameState === 'playing') {
-          startGame();
-        } else if (gameState === 'menu' || gameState === 'gameOver') {
-          if (gameRef.current.animationFrame) {
-            cancelAnimationFrame(gameRef.current.animationFrame);
-          }
-        }
-      }, [gameState]);
-
-      const startGame = () => {
-        const game = gameRef.current;
-        game.player = { 
-          x: canvasSize.width / 2, 
-          y: canvasSize.height / 2, 
-          angle: 0, 
-          speed: 3 
-        };
-        game.zombies = [];
-        game.bullets = [];
-        game.particles = [];
-        
-        setScore(0);
-        setHealth(100);
-        setAmmo(30);
-        setWave(1);
-        setSpecialCharges(3);
-        
-        spawnWave(1);
-        gameLoop();
       };
 
       const spawnWave = (waveNum) => {
-        const game = gameRef.current;
-        const zombieCount = 5 + waveNum * 3;
+        setShowWaveAlert(true);
+        setTimeout(() => setShowWaveAlert(false), 2000);
+        
+        const zombieCount = 5 + waveNum * 2;
         
         for (let i = 0; i < zombieCount; i++) {
           setTimeout(() => {
-            const side = Math.floor(Math.random() * 4);
-            let x, y;
+            const angle = Math.random() * Math.PI * 2;
+            const distance = 30 + Math.random() * 20;
+            const x = Math.cos(angle) * distance;
+            const z = Math.sin(angle) * distance;
             
-            switch(side) {
-              case 0: x = Math.random() * canvasSize.width; y = -20; break;
-              case 1: x = canvasSize.width + 20; y = Math.random() * canvasSize.height; break;
-              case 2: x = Math.random() * canvasSize.width; y = canvasSize.height + 20; break;
-              case 3: x = -20; y = Math.random() * canvasSize.height; break;
-            }
+            const zombieGroup = new THREE.Group();
+            zombieGroup.position.set(x, 0, z);
             
-            game.zombies.push({
-              x, y,
-              speed: 0.5 + waveNum * 0.1,
-              health: 2 + Math.floor(waveNum / 3),
-              maxHealth: 2 + Math.floor(waveNum / 3)
+            const zombieBody = new THREE.BoxGeometry(0.8, 1.8, 0.4);
+            const zombieMaterial = new THREE.MeshStandardMaterial({
+              color: 0x228B22,
+              emissive: 0xff0000,
+              emissiveIntensity: 0.2
             });
-          }, i * 500);
+            const body = new THREE.Mesh(zombieBody, zombieMaterial);
+            body.position.y = 0.9;
+            body.castShadow = true;
+            zombieGroup.add(body);
+            
+            const zombieHead = new THREE.SphereGeometry(0.35, 16, 16);
+            const head = new THREE.Mesh(zombieHead, zombieMaterial);
+            head.position.y = 2;
+            head.castShadow = true;
+            zombieGroup.add(head);
+            
+            gameRef.current.scene.add(zombieGroup);
+            gameRef.current.zombies.push({
+              mesh: zombieGroup,
+              health: 2 + Math.floor(waveNum / 2),
+              maxHealth: 2 + Math.floor(waveNum / 2),
+              speed: 0.05 + waveNum * 0.01
+            });
+          }, i * 300);
         }
       };
 
       const shoot = () => {
-        const game = gameRef.current;
         const now = Date.now();
+        if (now - gameRef.current.lastShot < 200 || ammo <= 0) return;
         
-        if (now - game.lastShot < 250 || ammo <= 0) return;
-        
-        game.lastShot = now;
+        gameRef.current.lastShot = now;
         setAmmo(prev => prev - 1);
-        playSound('shoot');
         
-        const angle = Math.atan2(
-          game.mousePos.y - game.player.y,
-          game.mousePos.x - game.player.x
-        );
+        const player = gameRef.current.player;
+        const direction = new THREE.Vector3(
+          gameRef.current.mouseX,
+          0,
+          -gameRef.current.mouseY
+        ).normalize();
         
-        game.bullets.push({
-          x: game.player.x,
-          y: game.player.y,
-          vx: Math.cos(angle) * 8,
-          vy: Math.sin(angle) * 8
+        const bulletGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+        const bulletMaterial = new THREE.MeshStandardMaterial({
+          color: 0xffff00,
+          emissive: 0xffff00,
+          emissiveIntensity: 1
         });
+        const bullet = new THREE.Mesh(bulletGeometry, bulletMaterial);
+        bullet.position.copy(player.position);
+        bullet.position.y = 1.5;
+        
+        gameRef.current.scene.add(bullet);
+        gameRef.current.bullets.push({
+          mesh: bullet,
+          velocity: direction.multiplyScalar(0.8)
+        });
+        
+        // Add point light to bullet
+        const light = new THREE.PointLight(0xffff00, 1, 5);
+        bullet.add(light);
       };
 
       const useSpecial = () => {
         if (specialCharges <= 0) return;
         
-        const game = gameRef.current;
         setSpecialCharges(prev => prev - 1);
-        playSound('special');
         
-        createParticles(game.player.x, game.player.y, '#fbbf24', 30);
+        // Explosion effect
+        const explosionGeometry = new THREE.SphereGeometry(15, 32, 32);
+        const explosionMaterial = new THREE.MeshBasicMaterial({
+          color: 0x00ffff,
+          transparent: true,
+          opacity: 0.5,
+          wireframe: true
+        });
+        const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+        explosion.position.copy(gameRef.current.player.position);
+        gameRef.current.scene.add(explosion);
         
-        game.zombies.forEach(zombie => {
-          const dx = zombie.x - game.player.x;
-          const dy = zombie.y - game.player.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          
-          if (dist < 300) {
+        setTimeout(() => {
+          gameRef.current.scene.remove(explosion);
+        }, 500);
+        
+        // Damage zombies
+        gameRef.current.zombies.forEach(zombie => {
+          const distance = zombie.mesh.position.distanceTo(gameRef.current.player.position);
+          if (distance < 15) {
             zombie.health -= 3;
-            createParticles(zombie.x, zombie.y, '#ef4444', 5);
           }
         });
         
-        const killedCount = game.zombies.filter(z => z.health <= 0).length;
-        game.zombies = game.zombies.filter(z => z.health > 0);
-        
-        setScore(prev => prev + killedCount * 10);
+        // Remove dead zombies
+        gameRef.current.zombies = gameRef.current.zombies.filter(zombie => {
+          if (zombie.health <= 0) {
+            gameRef.current.scene.remove(zombie.mesh);
+            setScore(prev => prev + 10);
+            return false;
+          }
+          return true;
+        });
       };
 
-      const createParticles = (x, y, color, count = 8) => {
+      const animate = () => {
         const game = gameRef.current;
-        for (let i = 0; i < count; i++) {
-          const angle = (Math.PI * 2 * i) / count;
-          game.particles.push({
-            x, y,
-            vx: Math.cos(angle) * (2 + Math.random() * 2),
-            vy: Math.sin(angle) * (2 + Math.random() * 2),
-            life: 30,
-            color
-          });
-        }
-      };
-
-      const gameLoop = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
         
-        const ctx = canvas.getContext('2d');
-        const game = gameRef.current;
-        const { width, height } = canvasSize;
-
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, width, height);
-
-        // Grid
-        ctx.strokeStyle = '#2a2a2a';
-        ctx.lineWidth = 1;
-        for (let i = 0; i < width; i += 40) {
-          ctx.beginPath();
-          ctx.moveTo(i, 0);
-          ctx.lineTo(i, height);
-          ctx.stroke();
-        }
-        for (let i = 0; i < height; i += 40) {
-          ctx.beginPath();
-          ctx.moveTo(0, i);
-          ctx.lineTo(width, i);
-          ctx.stroke();
-        }
-
-        if (mouseDownRef.current) {
-          shoot();
-        }
-
-        if (game.keys['w'] || game.keys['arrowup']) {
-          game.player.y = Math.max(20, game.player.y - game.player.speed);
-        }
-        if (game.keys['s'] || game.keys['arrowdown']) {
-          game.player.y = Math.min(height - 20, game.player.y + game.player.speed);
-        }
-        if (game.keys['a'] || game.keys['arrowleft']) {
-          game.player.x = Math.max(20, game.player.x - game.player.speed);
-        }
-        if (game.keys['d'] || game.keys['arrowright']) {
-          game.player.x = Math.min(width - 20, game.player.x + game.player.speed);
-        }
-
-        game.player.angle = Math.atan2(
-          game.mousePos.y - game.player.y,
-          game.mousePos.x - game.player.x
-        );
-
+        // Player movement
+        const moveSpeed = 0.2;
+        if (game.keys['w']) game.player.position.z -= moveSpeed;
+        if (game.keys['s']) game.player.position.z += moveSpeed;
+        if (game.keys['a']) game.player.position.x -= moveSpeed;
+        if (game.keys['d']) game.player.position.x += moveSpeed;
+        
+        // Clamp player position
+        game.player.position.x = Math.max(-40, Math.min(40, game.player.position.x));
+        game.player.position.z = Math.max(-40, Math.min(40, game.player.position.z));
+        
+        // Player rotation
+        const targetRotation = Math.atan2(game.mouseX, -game.mouseY);
+        game.player.rotation.y = targetRotation;
+        
+        // Camera follow
+        game.camera.position.x = game.player.position.x;
+        game.camera.position.z = game.player.position.z + 15;
+        game.camera.lookAt(game.player.position);
+        
+        // Update bullets
         game.bullets = game.bullets.filter(bullet => {
-          bullet.x += bullet.vx;
-          bullet.y += bullet.vy;
-          return bullet.x > 0 && bullet.x < width && bullet.y > 0 && bullet.y < height;
-        });
-
-        game.zombies.forEach(zombie => {
-          const dx = game.player.x - zombie.x;
-          const dy = game.player.y - zombie.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
+          bullet.mesh.position.add(bullet.velocity);
           
-          if (dist > 0) {
-            zombie.x += (dx / dist) * zombie.speed;
-            zombie.y += (dy / dist) * zombie.speed;
+          const distance = bullet.mesh.position.length();
+          if (distance > 50) {
+            game.scene.remove(bullet.mesh);
+            return false;
           }
-
-          zombie.walkCycle = (zombie.walkCycle || 0) + 0.15;
-
-          if (dist < 30) {
+          
+          // Check collision with zombies
+          for (let i = game.zombies.length - 1; i >= 0; i--) {
+            const zombie = game.zombies[i];
+            const dist = bullet.mesh.position.distanceTo(zombie.mesh.position);
+            
+            if (dist < 1) {
+              zombie.health--;
+              game.scene.remove(bullet.mesh);
+              
+              if (zombie.health <= 0) {
+                game.scene.remove(zombie.mesh);
+                game.zombies.splice(i, 1);
+                setScore(prev => prev + 10);
+                
+                if (Math.random() < 0.3) {
+                  setAmmo(prev => prev + 5);
+                }
+              }
+              
+              return false;
+            }
+          }
+          
+          return true;
+        });
+        
+        // Update zombies
+        game.zombies.forEach(zombie => {
+          const direction = new THREE.Vector3()
+            .subVectors(game.player.position, zombie.mesh.position)
+            .normalize();
+          
+          zombie.mesh.position.add(direction.multiplyScalar(zombie.speed));
+          zombie.mesh.lookAt(game.player.position);
+          
+          // Check collision with player
+          const dist = zombie.mesh.position.distanceTo(game.player.position);
+          if (dist < 1.5) {
             setHealth(prev => {
-              const newHealth = Math.max(0, prev - 0.5);
+              const newHealth = Math.max(0, prev - 0.3);
               if (newHealth <= 0) {
-                playSound('gameOver');
                 setGameState('gameOver');
-                setHighScore(prevHigh => Math.max(prevHigh, score));
-              } else if (Math.random() < 0.1) {
-                playSound('damage');
               }
               return newHealth;
             });
           }
         });
-
-        game.bullets.forEach((bullet, bIndex) => {
-          game.zombies.forEach((zombie, zIndex) => {
-            const dx = bullet.x - zombie.x;
-            const dy = bullet.y - zombie.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            
-            if (dist < 20) {
-              zombie.health--;
-              game.bullets.splice(bIndex, 1);
-              playSound('hit');
-              
-              if (zombie.health <= 0) {
-                createParticles(zombie.x, zombie.y, '#ef4444');
-                createParticles(zombie.x, zombie.y, '#7f1d1d', 12);
-                game.zombies.splice(zIndex, 1);
-                setScore(prev => prev + 10);
-                playSound('kill');
-                
-                if (Math.random() < 0.3) {
-                  setAmmo(prev => prev + 5);
-                  playSound('reload');
-                }
-              }
-            }
-          });
-        });
-
-        game.particles = game.particles.filter(p => {
-          p.x += p.vx;
-          p.y += p.vy;
-          p.vx *= 0.98;
-          p.vy *= 0.98;
-          p.life--;
-          return p.life > 0;
-        });
-
+        
+        // Check wave completion
         if (game.zombies.length === 0 && gameState === 'playing') {
           setWave(prev => {
             const newWave = prev + 1;
             spawnWave(newWave);
-            setAmmo(prevAmmo => prevAmmo + 10);
+            setAmmo(prevAmmo => prevAmmo + 15);
             setSpecialCharges(prevCharges => Math.min(5, prevCharges + 1));
-            playSound('wave');
             return newWave;
           });
         }
-
-        // Draw blood particles
-        game.particles.forEach(p => {
-          ctx.fillStyle = p.color;
-          ctx.globalAlpha = p.life / 30;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        ctx.globalAlpha = 1;
-
-        // Draw zombies with realistic 2D sprites
-        game.zombies.forEach(zombie => {
-          ctx.save();
-          ctx.translate(zombie.x, zombie.y);
-          
-          const angle = Math.atan2(game.player.y - zombie.y, game.player.x - zombie.x);
-          const facingRight = Math.abs(angle) < Math.PI / 2;
-          
-          if (!facingRight) {
-            ctx.scale(-1, 1);
-          }
-
-          // Body
-          ctx.fillStyle = '#4a5568';
-          ctx.fillRect(-12, -15, 24, 35);
-          
-          // Torn shirt
-          ctx.fillStyle = '#2d3748';
-          ctx.fillRect(-12, -15, 24, 20);
-          ctx.fillStyle = '#1a202c';
-          ctx.fillRect(-10, -10, 8, 3);
-          ctx.fillRect(2, -10, 8, 3);
-          
-          // Legs with walking animation
-          const legSwing = Math.sin(zombie.walkCycle) * 10;
-          ctx.fillStyle = '#2d3748';
-          ctx.fillRect(-8, 20, 7, 15 + legSwing);
-          ctx.fillRect(1, 20, 7, 15 - legSwing);
-          
-          // Arms
-          const armSwing = Math.sin(zombie.walkCycle + 1) * 8;
-          ctx.fillStyle = '#6b7280';
-          ctx.fillRect(-15, -5 + armSwing, 6, 20);
-          ctx.fillRect(9, -5 - armSwing, 6, 20);
-          
-          // Head
-          ctx.fillStyle = '#7c9885';
-          ctx.beginPath();
-          ctx.arc(0, -20, 10, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Eyes (red)
-          ctx.fillStyle = '#dc2626';
-          ctx.beginPath();
-          ctx.arc(-4, -22, 2, 0, Math.PI * 2);
-          ctx.arc(4, -22, 2, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Mouth (gaping)
-          ctx.fillStyle = '#1a202c';
-          ctx.beginPath();
-          ctx.arc(0, -16, 3, 0, Math.PI);
-          ctx.fill();
-          
-          // Blood drips
-          ctx.fillStyle = '#7f1d1d';
-          ctx.fillRect(-2, -13, 2, 5);
-          ctx.fillRect(1, -11, 1, 3);
-          
-          // Scars
-          ctx.strokeStyle = '#374151';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(-7, -18);
-          ctx.lineTo(-3, -16);
-          ctx.stroke();
-
-          ctx.restore();
-
-          // Health bar
-          const healthPercent = zombie.health / zombie.maxHealth;
-          ctx.fillStyle = '#1f2937';
-          ctx.fillRect(zombie.x - 20, zombie.y - 45, 40, 5);
-          ctx.fillStyle = '#dc2626';
-          ctx.fillRect(zombie.x - 20, zombie.y - 45, 40 * healthPercent, 5);
-          
-          // Health bar border
-          ctx.strokeStyle = '#000';
-          ctx.lineWidth = 1;
-          ctx.strokeRect(zombie.x - 20, zombie.y - 45, 40, 5);
-        });
-
-        // Draw bullets with glow
-        game.bullets.forEach(bullet => {
-          ctx.shadowBlur = 10;
-          ctx.shadowColor = '#fbbf24';
-          ctx.fillStyle = '#fbbf24';
-          ctx.beginPath();
-          ctx.arc(bullet.x, bullet.y, 4, 0, Math.PI * 2);
-          ctx.fill();
-          
-          // Bullet trail
-          ctx.fillStyle = '#f59e0b';
-          ctx.globalAlpha = 0.5;
-          ctx.beginPath();
-          ctx.arc(bullet.x - bullet.vx * 0.5, bullet.y - bullet.vy * 0.5, 3, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.globalAlpha = 1;
-          ctx.shadowBlur = 0;
-        });
-
-        // Draw player with realistic 2D sprite
-        ctx.save();
-        ctx.translate(game.player.x, game.player.y);
-        ctx.rotate(game.player.angle);
         
-        // Body (tactical vest)
-        ctx.fillStyle = '#1e3a8a';
-        ctx.fillRect(-15, -20, 30, 40);
-        
-        // Vest details
-        ctx.fillStyle = '#1e40af';
-        ctx.fillRect(-12, -15, 24, 30);
-        ctx.fillStyle = '#2563eb';
-        ctx.fillRect(-10, -10, 8, 5);
-        ctx.fillRect(2, -10, 8, 5);
-        
-        // Belt
-        ctx.fillStyle = '#374151';
-        ctx.fillRect(-15, 10, 30, 4);
-        ctx.fillStyle = '#fbbf24';
-        ctx.fillRect(-2, 10, 4, 4);
-        
-        // Legs
-        ctx.fillStyle = '#1f2937';
-        ctx.fillRect(-10, 20, 8, 15);
-        ctx.fillRect(2, 20, 8, 15);
-        
-        // Boots
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(-10, 30, 8, 5);
-        ctx.fillRect(2, 30, 8, 5);
-        
-        // Arms
-        ctx.fillStyle = '#4b5563';
-        ctx.fillRect(-18, -8, 6, 20);
-        ctx.fillRect(12, -8, 6, 20);
-        
-        // Gun (detailed)
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(10, -5, 25, 8);
-        ctx.fillStyle = '#374151';
-        ctx.fillRect(10, -3, 25, 4);
-        ctx.fillStyle = '#0f172a';
-        ctx.fillRect(32, -4, 3, 6);
-        
-        // Gun barrel
-        ctx.fillStyle = '#000';
-        ctx.fillRect(35, -2, 8, 2);
-        
-        // Muzzle flash when shooting
-        if (mouseDownRef.current && Date.now() - game.lastShot < 100) {
-          ctx.fillStyle = '#fbbf24';
-          ctx.globalAlpha = 0.8;
-          ctx.beginPath();
-          ctx.moveTo(43, 0);
-          ctx.lineTo(50, -5);
-          ctx.lineTo(50, 5);
-          ctx.closePath();
-          ctx.fill();
-          ctx.globalAlpha = 1;
-        }
-        
-        ctx.restore();
-        
-        // Draw head separately (always upright)
-        ctx.save();
-        ctx.translate(game.player.x, game.player.y);
-        
-        // Head
-        ctx.fillStyle = '#fbbf24';
-        ctx.beginPath();
-        ctx.arc(0, -25, 12, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Helmet
-        ctx.fillStyle = '#1e3a8a';
-        ctx.beginPath();
-        ctx.arc(0, -27, 12, Math.PI, Math.PI * 2);
-        ctx.fill();
-        
-        // Face mask
-        ctx.fillStyle = '#1f2937';
-        ctx.fillRect(-8, -22, 16, 8);
-        
-        // Eyes
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(-4, -20, 2, 0, Math.PI * 2);
-        ctx.arc(4, -20, 2, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Pupils
-        ctx.fillStyle = '#000';
-        ctx.beginPath();
-        ctx.arc(-4, -20, 1, 0, Math.PI * 2);
-        ctx.arc(4, -20, 1, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-
-        // Crosshair with animation
-        const crosshairSize = 12 + Math.sin(Date.now() * 0.005) * 2;
-        ctx.strokeStyle = '#ef4444';
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 5;
-        ctx.shadowColor = '#ef4444';
-        ctx.beginPath();
-        ctx.moveTo(game.mousePos.x - crosshairSize, game.mousePos.y);
-        ctx.lineTo(game.mousePos.x + crosshairSize, game.mousePos.y);
-        ctx.moveTo(game.mousePos.x, game.mousePos.y - crosshairSize);
-        ctx.lineTo(game.mousePos.x, game.mousePos.y + crosshairSize);
-        ctx.stroke();
-        
-        // Crosshair center dot
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.arc(game.mousePos.x, game.mousePos.y, 2, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-
-        game.animationFrame = requestAnimationFrame(gameLoop);
+        game.renderer.render(game.scene, game.camera);
+        game.animationFrame = requestAnimationFrame(animate);
       };
 
-      return React.createElement('div', {
-        className: "min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center p-2 sm:p-4 game-content"
-      },
-        React.createElement('div', { className: "max-w-full w-full" },
-          gameState === 'menu' && React.createElement('div', { className: "text-center space-y-4 sm:space-y-8 px-4" },
-            React.createElement('div', { className: "space-y-2 sm:space-y-4" },
-              React.createElement(Skull, { className: "w-16 h-16 sm:w-24 sm:h-24 mx-auto text-red-500" }),
-              React.createElement('h1', { className: "text-3xl sm:text-4xl md:text-6xl font-bold text-white" }, "SOBREVIVÊNCIA ZUMBI"),
-              React.createElement('p', { className: "text-base sm:text-xl text-gray-300" }, "Sobreviva às ondas de zumbis!")
-            ),
-            React.createElement('div', { className: "bg-black/50 rounded-lg p-4 sm:p-6 text-left max-w-md mx-auto space-y-2 sm:space-y-3 text-gray-300 text-sm sm:text-base" },
-              React.createElement('h2', { className: "text-2xl font-bold text-white mb-4" }, "Como Jogar:"),
-              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "WASD / Setas:"), " Mover"),
-              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "Mouse:"), " Mirar"),
-              React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "Segurar Mouse:"), " Tiro automático"),
-              React.createElement('p', {}, React.createElement('strong', { className: "text-cyan-400" }, "ESPAÇO:"), " Habilidade Especial (explosão)"),
-              React.createElement('p', { className: "text-sm text-yellow-400 mt-4" }, "💡 Zumbis soltam munição aleatoriamente!"),
-              React.createElement('p', { className: "text-sm text-cyan-400" }, "⚡ Ganhe cargas especiais ao completar ondas!")
-            ),
-            highScore > 0 && React.createElement('div', { className: "flex items-center justify-center gap-2 text-yellow-400 text-xl" },
-              React.createElement(Award, { className: "w-6 h-6" }),
-              React.createElement('span', {}, `Recorde: ${highScore}`)
-            ),
+      return React.createElement('div', { style: { width: '100%', height: '100%' } },
+        gameState === 'menu' && React.createElement('div', { className: 'menu-container' },
+          React.createElement('div', { className: 'menu-bg' }),
+          React.createElement('div', { className: 'menu-content' },
+            React.createElement('h1', { className: 'game-title' }, 'UNDEAD'),
+            React.createElement('div', { className: 'game-subtitle' }, 'PROTOCOL'),
             React.createElement('button', {
-              onClick: () => setGameState('playing'),
-              className: "bg-red-600 hover:bg-red-700 text-white px-6 sm:px-12 py-3 sm:py-4 rounded-lg text-lg sm:text-2xl font-bold flex items-center gap-2 sm:gap-3 mx-auto transition-all transform hover:scale-105"
-            },
-              React.createElement(PlayCircle, { className: "w-6 h-6 sm:w-8 sm:h-8" }),
-              "Começar Jogo"
-            )
-          ),
-          
-          gameState === 'playing' && React.createElement('div', { className: "space-y-2 sm:space-y-4 w-full" },
-            React.createElement('div', { className: "bg-black/70 rounded-lg p-2 sm:p-4 flex flex-wrap justify-between items-center text-white gap-2" },
-              React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
-                React.createElement(Heart, { className: "w-4 h-4 sm:w-6 sm:h-6 text-red-500" }),
-                React.createElement('div', { className: "w-24 sm:w-48 bg-gray-700 rounded-full h-4 sm:h-6" },
-                  React.createElement('div', {
-                    className: "bg-red-500 h-4 sm:h-6 rounded-full transition-all",
-                    style: { width: `${health}%` }
-                  })
-                ),
-                React.createElement('span', { className: "font-bold text-sm sm:text-base" }, `${Math.round(health)}%`)
-              ),
-              React.createElement('div', { className: "flex items-center gap-2 sm:gap-4" },
-                React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
-                  React.createElement(Target, { className: "w-4 h-4 sm:w-6 sm:h-6 text-yellow-500" }),
-                  React.createElement('span', { className: "font-bold text-lg sm:text-2xl" }, ammo)
-                ),
-                React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
-                  React.createElement(Zap, { className: "w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" }),
-                  React.createElement('div', { className: "flex gap-1" },
-                    [...Array(5)].map((_, i) =>
-                      React.createElement('div', {
-                        key: i,
-                        className: `w-2 h-4 sm:w-3 sm:h-6 rounded ${i < specialCharges ? 'bg-cyan-400' : 'bg-gray-600'}`
-                      })
-                    )
-                  )
-                )
-              ),
-              React.createElement('div', { className: "flex items-center gap-2 sm:gap-4" },
-                React.createElement('span', { className: "text-sm sm:text-xl" }, 
-                  "Onda: ",
-                  React.createElement('strong', { className: "text-red-400" }, wave)
-                ),
-                React.createElement('span', { className: "text-sm sm:text-xl" },
-                  "Pontos: ",
-                  React.createElement('strong', { className: "text-yellow-400" }, score)
-                ),
-                React.createElement('button', {
-                  onClick: () => setSoundEnabled(!soundEnabled),
-                  className: "p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors"
-                },
-                  soundEnabled ? React.createElement(Volume2, { className: "w-4 h-4 sm:w-6 sm:h-6" }) : React.createElement(VolumeX, { className: "w-4 h-4 sm:w-6 sm:h-6" })
-                )
-              )
-            ),
-            React.createElement('canvas', {
-              ref: canvasRef,
-              width: canvasSize.width,
-              height: canvasSize.height,
-              className: "border-4 border-red-600 rounded-lg cursor-none",
-              style: { 
-                maxWidth: '100%',
-                maxHeight: '100%',
-                width: canvasSize.width + 'px',
-                height: canvasSize.height + 'px'
+              className: 'btn-start',
+              onClick: () => {
+                setHealth(100);
+                setAmmo(30);
+                setScore(0);
+                setWave(1);
+                setSpecialCharges(3);
+                setGameState('playing');
               }
-            }),
-            React.createElement('div', { className: "text-center text-gray-400 text-sm space-y-1" },
-              React.createElement('p', {}, "🎯 Sobreviva o máximo que puder! Cada onda fica mais difícil."),
-              React.createElement('p', { className: "text-cyan-400" }, `⚡ Pressione ESPAÇO para usar a habilidade especial (${specialCharges} disponíveis)`)
+            }, 'INICIAR'),
+            React.createElement('div', { className: 'controls-info' },
+              React.createElement('div', { className: 'controls-title' }, '[ CONTROLES ]'),
+              React.createElement('div', { className: 'control-item' },
+                React.createElement('span', {}, 'MOVIMENTO'),
+                React.createElement('span', { className: 'control-key' }, 'WASD')
+              ),
+              React.createElement('div', { className: 'control-item' },
+                React.createElement('span', {}, 'MIRAR'),
+                React.createElement('span', { className: 'control-key' }, 'MOUSE')
+              ),
+              React.createElement('div', { className: 'control-item' },
+                React.createElement('span', {}, 'ATIRAR'),
+                React.createElement('span', { className: 'control-key' }, 'CLICK')
+              ),
+              React.createElement('div', { className: 'control-item' },
+                React.createElement('span', {}, 'ESPECIAL'),
+                React.createElement('span', { className: 'control-key' }, 'ESPAÇO')
+              )
+            )
+          )
+        ),
+        
+        gameState === 'playing' && React.createElement('div', {},
+          React.createElement('div', { ref: containerRef, className: 'game-canvas' }),
+          React.createElement('div', { className: 'hud' },
+            React.createElement('div', { className: 'hud-section' },
+              React.createElement('div', { className: 'hud-title' }, 'VIDA'),
+              React.createElement('div', { className: 'hud-value' }, Math.round(health) + '%'),
+              React.createElement('div', { className: 'health-bar' },
+                React.createElement('div', {
+                  className: 'health-fill',
+                  style: { width: health + '%' }
+                })
+              )
+            ),
+            React.createElement('div', { style: { display: 'flex', gap: '15px' } },
+              React.createElement('div', { className: 'hud-section' },
+                React.createElement('div', { className: 'hud-title' }, 'MUNIÇÃO'),
+                React.createElement('div', { className: 'hud-value' }, ammo)
+              ),
+              React.createElement('div', { className: 'hud-section' },
+                React.createElement('div', { className: 'hud-title' }, 'ONDA'),
+                React.createElement('div', { className: 'hud-value' }, wave)
+              ),
+              React.createElement('div', { className: 'hud-section' },
+                React.createElement('div', { className: 'hud-title' }, 'SCORE'),
+                React.createElement('div', { className: 'hud-value' }, score)
+              )
             )
           ),
-          
-          gameState === 'gameOver' && React.createElement('div', { className: "text-center space-y-8" },
-            React.createElement('div', { className: "space-y-4" },
-              React.createElement(Skull, { className: "w-24 h-24 mx-auto text-red-500 animate-pulse" }),
-              React.createElement('h1', { className: "text-6xl font-bold text-white" }, "GAME OVER"),
-              React.createElement('p', { className: "text-2xl text-red-400" }, "Você foi derrotado!")
-            ),
-            React.createElement('div', { className: "bg-black/50 rounded-lg p-8 max-w-md mx-auto space-y-4" },
-              React.createElement('div', { className: "flex justify-between text-xl text-white" },
-                React.createElement('span', {}, "Pontuação Final:"),
-                React.createElement('span', { className: "font-bold text-yellow-400" }, score)
-              ),
-              React.createElement('div', { className: "flex justify-between text-xl text-white" },
-                React.createElement('span', {}, "Ondas Sobrevividas:"),
-                React.createElement('span', { className: "font-bold text-red-400" }, wave - 1)
-              ),
-              score >= highScore && score > 0 && React.createElement('p', { className: "text-yellow-400 font-bold flex items-center justify-center gap-2" },
-                React.createElement(Award, { className: "w-6 h-6" }),
-                "NOVO RECORDE!"
-              )
-            ),
-            React.createElement('div', { className: "flex gap-4 justify-center" },
-              React.createElement('button', {
-                onClick: () => setGameState('playing'),
-                className: "bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-lg text-xl font-bold flex items-center gap-2 transition-all transform hover:scale-105"
-              },
-                React.createElement(RotateCcw, { className: "w-6 h-6" }),
-                "Jogar Novamente"
-              ),
-              React.createElement('button', {
-                onClick: () => setGameState('menu'),
-                className: "bg-gray-700 hover:bg-gray-600 text-white px-8 py-4 rounded-lg text-xl font-bold transition-all"
-              },
-                "Menu"
+          React.createElement('div', { className: 'crosshair' },
+            React.createElement('div', { className: 'crosshair-center' })
+          ),
+          React.createElement('div', { className: 'special-indicator' },
+            React.createElement('div', { className: 'special-charges' },
+              [...Array(5)].map((_, i) =>
+                React.createElement('div', {
+                  key: i,
+                  className: 'charge' + (i < specialCharges ? ' active' : '')
+                })
               )
             )
+          ),
+          showWaveAlert && React.createElement('div', { className: 'wave-alert' }, 
+            `ONDA ${wave}`
+          )
+        ),
+        
+        gameState === 'gameOver' && React.createElement('div', { className: 'menu-container' },
+          React.createElement('div', { className: 'menu-bg' }),
+          React.createElement('div', { className: 'menu-content' },
+            React.createElement('h1', { 
+              className: 'game-title',
+              style: { color: 'var(--neon-red)' }
+            }, 'ELIMINADO'),
+            React.createElement('div', { 
+              className: 'game-subtitle',
+              style: { marginBottom: '30px' }
+            }, 'MISSÃO FALHOU'),
+            React.createElement('div', { 
+              style: { 
+                fontSize: '48px', 
+                color: 'var(--neon-green)',
+                fontFamily: 'Orbitron',
+                marginBottom: '40px',
+                textShadow: '0 0 20px var(--neon-green)'
+              }
+            }, score + ' PONTOS'),
+            React.createElement('button', {
+              className: 'btn-start',
+              style: { borderColor: 'var(--neon-red)', color: 'var(--neon-red)' },
+              onClick: () => setGameState('menu')
+            }, 'MENU')
           )
         )
       );
     }
 
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(ZombieSurvivalGame));
+    root.render(React.createElement(ZombieGame3D));
   </script>
 </body>
 </html>
