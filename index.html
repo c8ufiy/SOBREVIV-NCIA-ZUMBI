@@ -2,22 +2,99 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="Jogo de sobrevivência de zumbi">
   <meta name="theme-color" content="#991b1b">
   <title>Sobrevivência Zumbi - PWA Game</title>
   <link rel="manifest" href="/manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
     body {
       margin: 0;
       padding: 0;
       overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      position: fixed;
+      touch-action: none;
+    }
+    
+    #root {
+      width: 100%;
+      height: 100%;
+    }
+    
+    canvas {
+      display: block;
+      touch-action: none;
+    }
+    
+    .game-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    @media (max-width: 768px) {
+      .desktop-only {
+        display: none !important;
+      }
+    }
+    
+    @media (orientation: portrait) and (max-width: 768px) {
+      .landscape-warning {
+        display: flex !important;
+      }
+      .game-content {
+        display: none !important;
+      }
+    }
+    
+    .landscape-warning {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(to bottom right, #1a1a1a, #991b1b, #1a1a1a);
+      color: white;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .rotate-icon {
+      font-size: 80px;
+      animation: rotate 2s infinite;
+    }
+    
+    @keyframes rotate {
+      0%, 100% { transform: rotate(0deg); }
+      50% { transform: rotate(90deg); }
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
+  
+  <!-- Landscape warning for mobile portrait -->
+  <div class="landscape-warning">
+    <div class="rotate-icon">📱</div>
+    <h1 style="font-size: 32px; font-weight: bold; margin: 20px 0;">Gire seu dispositivo</h1>
+    <p style="font-size: 18px; opacity: 0.8;">Este jogo funciona melhor na horizontal</p>
+  </div>
   
   <script type="module">
     import React from 'https://esm.sh/react@18.2.0';
@@ -37,6 +114,7 @@
       const [highScore, setHighScore] = useState(0);
       const [soundEnabled, setSoundEnabled] = useState(true);
       const [specialCharges, setSpecialCharges] = useState(3);
+      const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
       
       const audioContextRef = useRef(null);
       const mouseDownRef = useRef(false);
@@ -51,6 +129,46 @@
         lastShot: 0,
         animationFrame: null
       });
+
+      // Handle responsive canvas sizing
+      useEffect(() => {
+        const updateCanvasSize = () => {
+          const maxWidth = window.innerWidth - 40;
+          const maxHeight = window.innerHeight - 200;
+          const aspectRatio = 4 / 3;
+          
+          let width = maxWidth;
+          let height = width / aspectRatio;
+          
+          if (height > maxHeight) {
+            height = maxHeight;
+            width = height * aspectRatio;
+          }
+          
+          // Ensure minimum size
+          width = Math.max(320, Math.min(800, width));
+          height = Math.max(240, Math.min(600, height));
+          
+          setCanvasSize({ width, height });
+          
+          // Update game world if playing
+          if (gameRef.current.player) {
+            const scaleX = width / 800;
+            const scaleY = height / 600;
+            gameRef.current.player.x = 400 * scaleX;
+            gameRef.current.player.y = 300 * scaleY;
+          }
+        };
+        
+        updateCanvasSize();
+        window.addEventListener('resize', updateCanvasSize);
+        window.addEventListener('orientationchange', updateCanvasSize);
+        
+        return () => {
+          window.removeEventListener('resize', updateCanvasSize);
+          window.removeEventListener('orientationchange', updateCanvasSize);
+        };
+      }, []);
 
       useEffect(() => {
         audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
@@ -175,15 +293,25 @@
 
         const handleMouseMove = (e) => {
           const rect = canvas.getBoundingClientRect();
-          game.mousePos = {
-            x: e.clientX - rect.left,
-            y: e.clientY - rect.top
-          };
+          const scaleX = canvasSize.width / rect.width;
+          const scaleY = canvasSize.height / rect.height;
+          
+          const clientX = e.clientX || (e.touches && e.touches[0]?.clientX);
+          const clientY = e.clientY || (e.touches && e.touches[0]?.clientY);
+          
+          if (clientX !== undefined && clientY !== undefined) {
+            game.mousePos = {
+              x: (clientX - rect.left) * scaleX,
+              y: (clientY - rect.top) * scaleY
+            };
+          }
         };
 
         const handleMouseDown = (e) => {
           if (gameState !== 'playing') return;
+          e.preventDefault();
           mouseDownRef.current = true;
+          handleMouseMove(e);
           shoot();
         };
 
@@ -194,19 +322,27 @@
         window.addEventListener('keydown', handleKeyDown);
         window.addEventListener('keyup', handleKeyUp);
         canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('touchmove', handleMouseMove, { passive: false });
         canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('touchstart', handleMouseDown, { passive: false });
         canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('touchend', handleMouseUp);
         window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('touchend', handleMouseUp);
 
         return () => {
           window.removeEventListener('keydown', handleKeyDown);
           window.removeEventListener('keyup', handleKeyUp);
           canvas.removeEventListener('mousemove', handleMouseMove);
+          canvas.removeEventListener('touchmove', handleMouseMove);
           canvas.removeEventListener('mousedown', handleMouseDown);
+          canvas.removeEventListener('touchstart', handleMouseDown);
           canvas.removeEventListener('mouseup', handleMouseUp);
+          canvas.removeEventListener('touchend', handleMouseUp);
           window.removeEventListener('mouseup', handleMouseUp);
+          window.removeEventListener('touchend', handleMouseUp);
         };
-      }, [gameState]);
+      }, [gameState, canvasSize]);
 
       useEffect(() => {
         if (gameState === 'playing') {
@@ -220,7 +356,12 @@
 
       const startGame = () => {
         const game = gameRef.current;
-        game.player = { x: 400, y: 300, angle: 0, speed: 3 };
+        game.player = { 
+          x: canvasSize.width / 2, 
+          y: canvasSize.height / 2, 
+          angle: 0, 
+          speed: 3 
+        };
         game.zombies = [];
         game.bullets = [];
         game.particles = [];
@@ -245,10 +386,10 @@
             let x, y;
             
             switch(side) {
-              case 0: x = Math.random() * 800; y = -20; break;
-              case 1: x = 820; y = Math.random() * 600; break;
-              case 2: x = Math.random() * 800; y = 620; break;
-              case 3: x = -20; y = Math.random() * 600; break;
+              case 0: x = Math.random() * canvasSize.width; y = -20; break;
+              case 1: x = canvasSize.width + 20; y = Math.random() * canvasSize.height; break;
+              case 2: x = Math.random() * canvasSize.width; y = canvasSize.height + 20; break;
+              case 3: x = -20; y = Math.random() * canvasSize.height; break;
             }
             
             game.zombies.push({
@@ -330,23 +471,24 @@
         
         const ctx = canvas.getContext('2d');
         const game = gameRef.current;
+        const { width, height } = canvasSize;
 
         ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, 800, 600);
+        ctx.fillRect(0, 0, width, height);
 
         // Grid
         ctx.strokeStyle = '#2a2a2a';
         ctx.lineWidth = 1;
-        for (let i = 0; i < 800; i += 40) {
+        for (let i = 0; i < width; i += 40) {
           ctx.beginPath();
           ctx.moveTo(i, 0);
-          ctx.lineTo(i, 600);
+          ctx.lineTo(i, height);
           ctx.stroke();
         }
-        for (let i = 0; i < 600; i += 40) {
+        for (let i = 0; i < height; i += 40) {
           ctx.beginPath();
           ctx.moveTo(0, i);
-          ctx.lineTo(800, i);
+          ctx.lineTo(width, i);
           ctx.stroke();
         }
 
@@ -358,13 +500,13 @@
           game.player.y = Math.max(20, game.player.y - game.player.speed);
         }
         if (game.keys['s'] || game.keys['arrowdown']) {
-          game.player.y = Math.min(580, game.player.y + game.player.speed);
+          game.player.y = Math.min(height - 20, game.player.y + game.player.speed);
         }
         if (game.keys['a'] || game.keys['arrowleft']) {
           game.player.x = Math.max(20, game.player.x - game.player.speed);
         }
         if (game.keys['d'] || game.keys['arrowright']) {
-          game.player.x = Math.min(780, game.player.x + game.player.speed);
+          game.player.x = Math.min(width - 20, game.player.x + game.player.speed);
         }
 
         game.player.angle = Math.atan2(
@@ -375,7 +517,7 @@
         game.bullets = game.bullets.filter(bullet => {
           bullet.x += bullet.vx;
           bullet.y += bullet.vy;
-          return bullet.x > 0 && bullet.x < 800 && bullet.y > 0 && bullet.y < 600;
+          return bullet.x > 0 && bullet.x < width && bullet.y > 0 && bullet.y < height;
         });
 
         game.zombies.forEach(zombie => {
@@ -687,16 +829,16 @@
       };
 
       return React.createElement('div', {
-        className: "min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center p-4"
+        className: "min-h-screen bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 flex items-center justify-center p-2 sm:p-4 game-content"
       },
-        React.createElement('div', { className: "max-w-4xl w-full" },
-          gameState === 'menu' && React.createElement('div', { className: "text-center space-y-8" },
-            React.createElement('div', { className: "space-y-4" },
-              React.createElement(Skull, { className: "w-24 h-24 mx-auto text-red-500" }),
-              React.createElement('h1', { className: "text-6xl font-bold text-white" }, "SOBREVIVÊNCIA ZUMBI"),
-              React.createElement('p', { className: "text-xl text-gray-300" }, "Sobreviva às ondas de zumbis!")
+        React.createElement('div', { className: "max-w-full w-full" },
+          gameState === 'menu' && React.createElement('div', { className: "text-center space-y-4 sm:space-y-8 px-4" },
+            React.createElement('div', { className: "space-y-2 sm:space-y-4" },
+              React.createElement(Skull, { className: "w-16 h-16 sm:w-24 sm:h-24 mx-auto text-red-500" }),
+              React.createElement('h1', { className: "text-3xl sm:text-4xl md:text-6xl font-bold text-white" }, "SOBREVIVÊNCIA ZUMBI"),
+              React.createElement('p', { className: "text-base sm:text-xl text-gray-300" }, "Sobreviva às ondas de zumbis!")
             ),
-            React.createElement('div', { className: "bg-black/50 rounded-lg p-6 text-left max-w-md mx-auto space-y-3 text-gray-300" },
+            React.createElement('div', { className: "bg-black/50 rounded-lg p-4 sm:p-6 text-left max-w-md mx-auto space-y-2 sm:space-y-3 text-gray-300 text-sm sm:text-base" },
               React.createElement('h2', { className: "text-2xl font-bold text-white mb-4" }, "Como Jogar:"),
               React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "WASD / Setas:"), " Mover"),
               React.createElement('p', {}, React.createElement('strong', { className: "text-white" }, "Mouse:"), " Mirar"),
@@ -711,66 +853,70 @@
             ),
             React.createElement('button', {
               onClick: () => setGameState('playing'),
-              className: "bg-red-600 hover:bg-red-700 text-white px-12 py-4 rounded-lg text-2xl font-bold flex items-center gap-3 mx-auto transition-all transform hover:scale-105"
+              className: "bg-red-600 hover:bg-red-700 text-white px-6 sm:px-12 py-3 sm:py-4 rounded-lg text-lg sm:text-2xl font-bold flex items-center gap-2 sm:gap-3 mx-auto transition-all transform hover:scale-105"
             },
-              React.createElement(PlayCircle, { className: "w-8 h-8" }),
+              React.createElement(PlayCircle, { className: "w-6 h-6 sm:w-8 sm:h-8" }),
               "Começar Jogo"
             )
           ),
           
-          gameState === 'playing' && React.createElement('div', { className: "space-y-4" },
-            React.createElement('div', { className: "bg-black/70 rounded-lg p-4 flex justify-between items-center text-white" },
-              React.createElement('div', { className: "flex items-center gap-2" },
-                React.createElement(Heart, { className: "w-6 h-6 text-red-500" }),
-                React.createElement('div', { className: "w-48 bg-gray-700 rounded-full h-6" },
+          gameState === 'playing' && React.createElement('div', { className: "space-y-2 sm:space-y-4 w-full" },
+            React.createElement('div', { className: "bg-black/70 rounded-lg p-2 sm:p-4 flex flex-wrap justify-between items-center text-white gap-2" },
+              React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
+                React.createElement(Heart, { className: "w-4 h-4 sm:w-6 sm:h-6 text-red-500" }),
+                React.createElement('div', { className: "w-24 sm:w-48 bg-gray-700 rounded-full h-4 sm:h-6" },
                   React.createElement('div', {
-                    className: "bg-red-500 h-6 rounded-full transition-all",
+                    className: "bg-red-500 h-4 sm:h-6 rounded-full transition-all",
                     style: { width: `${health}%` }
                   })
                 ),
-                React.createElement('span', { className: "font-bold" }, `${Math.round(health)}%`)
+                React.createElement('span', { className: "font-bold text-sm sm:text-base" }, `${Math.round(health)}%`)
               ),
-              React.createElement('div', { className: "flex items-center gap-4" },
-                React.createElement('div', { className: "flex items-center gap-2" },
-                  React.createElement(Target, { className: "w-6 h-6 text-yellow-500" }),
-                  React.createElement('span', { className: "font-bold text-2xl" }, ammo)
+              React.createElement('div', { className: "flex items-center gap-2 sm:gap-4" },
+                React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
+                  React.createElement(Target, { className: "w-4 h-4 sm:w-6 sm:h-6 text-yellow-500" }),
+                  React.createElement('span', { className: "font-bold text-lg sm:text-2xl" }, ammo)
                 ),
-                React.createElement('div', { className: "flex items-center gap-2" },
-                  React.createElement(Zap, { className: "w-6 h-6 text-cyan-400" }),
+                React.createElement('div', { className: "flex items-center gap-1 sm:gap-2" },
+                  React.createElement(Zap, { className: "w-4 h-4 sm:w-6 sm:h-6 text-cyan-400" }),
                   React.createElement('div', { className: "flex gap-1" },
                     [...Array(5)].map((_, i) =>
                       React.createElement('div', {
                         key: i,
-                        className: `w-3 h-6 rounded ${i < specialCharges ? 'bg-cyan-400' : 'bg-gray-600'}`
+                        className: `w-2 h-4 sm:w-3 sm:h-6 rounded ${i < specialCharges ? 'bg-cyan-400' : 'bg-gray-600'}`
                       })
                     )
                   )
                 )
               ),
-              React.createElement('div', { className: "flex items-center gap-4" },
-                React.createElement('span', { className: "text-xl" }, 
+              React.createElement('div', { className: "flex items-center gap-2 sm:gap-4" },
+                React.createElement('span', { className: "text-sm sm:text-xl" }, 
                   "Onda: ",
                   React.createElement('strong', { className: "text-red-400" }, wave)
                 ),
-                React.createElement('span', { className: "text-xl" },
+                React.createElement('span', { className: "text-sm sm:text-xl" },
                   "Pontos: ",
                   React.createElement('strong', { className: "text-yellow-400" }, score)
                 ),
                 React.createElement('button', {
                   onClick: () => setSoundEnabled(!soundEnabled),
-                  className: "p-2 hover:bg-white/10 rounded-lg transition-colors",
-                  title: soundEnabled ? 'Desativar som' : 'Ativar som'
+                  className: "p-1 sm:p-2 hover:bg-white/10 rounded-lg transition-colors"
                 },
-                  soundEnabled ? React.createElement(Volume2, { className: "w-6 h-6" }) : React.createElement(VolumeX, { className: "w-6 h-6" })
+                  soundEnabled ? React.createElement(Volume2, { className: "w-4 h-4 sm:w-6 sm:h-6" }) : React.createElement(VolumeX, { className: "w-4 h-4 sm:w-6 sm:h-6" })
                 )
               )
             ),
             React.createElement('canvas', {
               ref: canvasRef,
-              width: 800,
-              height: 600,
-              className: "border-4 border-red-600 rounded-lg w-full cursor-none",
-              style: { maxWidth: '800px', aspectRatio: '4/3' }
+              width: canvasSize.width,
+              height: canvasSize.height,
+              className: "border-4 border-red-600 rounded-lg cursor-none",
+              style: { 
+                maxWidth: '100%',
+                maxHeight: '100%',
+                width: canvasSize.width + 'px',
+                height: canvasSize.height + 'px'
+              }
             }),
             React.createElement('div', { className: "text-center text-gray-400 text-sm space-y-1" },
               React.createElement('p', {}, "🎯 Sobreviva o máximo que puder! Cada onda fica mais difícil."),
